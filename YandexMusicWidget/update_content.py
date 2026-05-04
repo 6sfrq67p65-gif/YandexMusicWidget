@@ -1,4 +1,9 @@
-import SwiftUI
+import sys
+
+with open("/Users/artemcirkov/Gravity/YandexMusicWidget/YandexMusicWidget/YandexMusicWidget/YandexMusicWidget/ContentView.swift", "r") as f:
+    content = f.read()
+
+new_content = """import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = WebViewModel.shared
@@ -30,19 +35,16 @@ struct ContentView: View {
     }
     
     private func updateWindowSize(animated: Bool) {
-        DispatchQueue.main.async {
-            if let window = NSApplication.shared.windows.first {
-                let newSize = isHorizontal ? NSSize(width: 420, height: 180) : NSSize(width: 250, height: 420)
-                
+        if let window = NSApplication.shared.windows.first {
+            let newSize = isHorizontal ? NSSize(width: 420, height: 180) : NSSize(width: 250, height: 420)
+            
+            if animated {
                 var frame = window.frame
                 frame.origin.y += frame.size.height - newSize.height // Сохраняем позицию верхнего левого угла
                 frame.size = newSize
-                
-                if animated {
-                    window.setFrame(frame, display: true, animate: true)
-                } else {
-                    window.setFrame(frame, display: true)
-                }
+                window.setFrame(frame, display: true, animate: true)
+            } else {
+                window.setContentSize(newSize)
             }
         }
     }
@@ -251,3 +253,9 @@ struct VisualEffectView: NSViewRepresentable {
         visualEffectView.blendingMode = blendingMode
     }
 }
+"""
+
+with open("/Users/artemcirkov/Gravity/YandexMusicWidget/YandexMusicWidget/YandexMusicWidget/YandexMusicWidget/ContentView.swift", "w") as f:
+    f.write(new_content)
+
+print("Updated ContentView.swift")
