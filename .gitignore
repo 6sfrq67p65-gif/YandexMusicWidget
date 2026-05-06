@@ -47,3 +47,6 @@ playground.xcworkspace
 
 # macOS
 .DS_Store
+
+# Ignore macOS Apps
+*.app/
