@@ -12,6 +12,14 @@
 		<data>
 		H9xACZ1W4hfWB7G68swwlw4orpI=
 		</data>
+		<key>Resources/fix_yandex.py</key>
+		<data>
+		xI/VRkkjd2bk571vkf5TucmJFaE=
+		</data>
+		<key>Resources/update_content.py</key>
+		<data>
+		CO8hlMG2y2FP0mfxrM0+NNfkqGA=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
@@ -27,6 +35,20 @@
 			<key>hash2</key>
 			<data>
 			ZgPdFYaIpsGsfRFxc6Du1l26g9BxVWe5zNP0v26KFf8=
+			</data>
+		</dict>
+		<key>Resources/fix_yandex.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			RIOlT9wpF+BNG5bNfHiuIKec6I7cl0711TY/l1R6DbI=
+			</data>
+		</dict>
+		<key>Resources/update_content.py</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			3kYxa0S6KR7wjQft7TI13PYkv3SKhoEeUcry9duqnHo=
 			</data>
 		</dict>
 	</dict>

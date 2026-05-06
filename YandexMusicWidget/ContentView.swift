@@ -2,7 +2,17 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var viewModel = WebViewModel.shared
-    @AppStorage("isHorizontal") private var isHorizontal = false
+    @AppStorage("viewMode") private var viewMode = 0 // 0: vertical, 1: horizontal, 2: dock
+    
+    // Сохраненные размеры окон пользователем
+    @AppStorage("horizontalWidth") private var horizontalWidth: Double = 420
+    @AppStorage("horizontalHeight") private var horizontalHeight: Double = 180
+    @AppStorage("verticalWidth") private var verticalWidth: Double = 250
+    @AppStorage("verticalHeight") private var verticalHeight: Double = 420
+    @AppStorage("dockWidth") private var dockWidth: Double = 400
+    @AppStorage("dockHeight") private var dockHeight: Double = 60
+    
+    @State private var dragOffset: CGPoint? = nil
     
     var body: some View {
         ZStack {
@@ -12,19 +22,43 @@ struct ContentView: View {
                 .ignoresSafeArea()
             
             // Основной интерфейс мини-плеера
-            if isHorizontal {
+            if viewMode == 0 {
+                verticalBody
+            } else if viewMode == 1 {
                 horizontalBody
             } else {
-                verticalBody
+                dockBody
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous)) // Скругляем углы как у системного Dock
+        .ignoresSafeArea() // Игнорируем safe area, чтобы системный заголовок не смещал контент вниз
         .frame(maxWidth: .infinity, maxHeight: .infinity) // Динамическое заполнение всего окна Mac
+        .gesture(
+            DragGesture()
+                .onChanged { _ in
+                    if let window = NSApplication.shared.windows.first {
+                        let mouseLoc = NSEvent.mouseLocation
+                        if dragOffset == nil {
+                            dragOffset = CGPoint(
+                                x: window.frame.origin.x - mouseLoc.x,
+                                y: window.frame.origin.y - mouseLoc.y
+                            )
+                        }
+                        if let offset = dragOffset {
+                            window.setFrameOrigin(CGPoint(x: mouseLoc.x + offset.x, y: mouseLoc.y + offset.y))
+                        }
+                    }
+                }
+                .onEnded { _ in
+                    dragOffset = nil
+                }
+        )
         .onAppear {
             // При запуске приложения невидимо инициализируем браузер в фоне
             BrowserWindowManager.shared.setup()
             updateWindowSize(animated: false)
         }
-        .onChange(of: isHorizontal) { _ in
+        .onChange(of: viewMode) { _ in
             updateWindowSize(animated: true)
         }
     }
@@ -32,11 +66,38 @@ struct ContentView: View {
     private func updateWindowSize(animated: Bool) {
         DispatchQueue.main.async {
             if let window = NSApplication.shared.windows.first {
-                let newSize = isHorizontal ? NSSize(width: 420, height: 180) : NSSize(width: 250, height: 420)
+                // Используем сохраненные пользователем размеры (с минимальными ограничениями)
+                let vSize = NSSize(width: max(200, verticalWidth), height: max(300, verticalHeight))
+                let hSize = NSSize(width: max(300, horizontalWidth), height: max(120, horizontalHeight))
+                let dSize = NSSize(width: max(180, dockWidth), height: max(30, dockHeight))
+                
+                let newSize: NSSize
+                let minSize: NSSize
+                
+                if viewMode == 0 {
+                    newSize = vSize
+                    minSize = NSSize(width: 200, height: 300)
+                } else if viewMode == 1 {
+                    newSize = hSize
+                    minSize = NSSize(width: 300, height: 120)
+                } else {
+                    newSize = dSize
+                    minSize = NSSize(width: 150, height: 15) // Позволяет делать dock супер узким
+                }
                 
                 var frame = window.frame
-                frame.origin.y += frame.size.height - newSize.height // Сохраняем позицию верхнего левого угла
+                
+                // Чтобы виджет не "улетал" при смене размера:
+                // Если он находится в верхней половине экрана — фиксируем верхний край.
+                // Если в нижней — фиксируем нижний край (стандартное поведение macOS).
+                if let screen = window.screen, frame.origin.y > (screen.visibleFrame.height / 2) {
+                    frame.origin.y += frame.size.height - newSize.height
+                }
+                
                 frame.size = newSize
+                
+                // Устанавливаем минимальный размер окна, чтобы элементы не сжимались до ошибок
+                window.minSize = minSize
                 
                 if animated {
                     window.setFrame(frame, display: true, animate: true)
@@ -128,6 +189,117 @@ struct ContentView: View {
         .padding(.vertical, 20)
     }
     
+    private var dockBody: some View {
+        GeometryReader { geo in
+            let h = geo.size.height
+            let isSuperSmall = h <= 25 // Если панель стала совсем узкой
+            
+            HStack(spacing: isSuperSmall ? 8 : 12) {
+                if !isSuperSmall {
+                    // Картинка масштабируется, но не больше 50
+                    let coverSize = max(15, min(50, h - 10))
+                    coverView(size: coverSize)
+                        .padding(.leading, 10)
+                } else {
+                    Spacer().frame(width: 5)
+                }
+                
+                VStack(alignment: .leading, spacing: isSuperSmall ? 0 : 2) {
+                    // Название и артист
+                    Text(viewModel.trackTitle)
+                        .font(.system(size: isSuperSmall ? 10 : 13, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    if !isSuperSmall || h > 18 { // Скрываем артиста если уж совсем в линию
+                        Text(viewModel.artist.isEmpty ? " " : viewModel.artist)
+                            .font(.system(size: isSuperSmall ? 9 : 11, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(width: isSuperSmall ? 140 : 120, alignment: .leading)
+                
+                Spacer(minLength: 0)
+                
+                // Кнопки управления плеером (масштабируются)
+                HStack(spacing: isSuperSmall ? 10 : 15) {
+                    Button(action: { viewModel.prevTrack() }) {
+                        Image(systemName: "backward.fill")
+                            .font(.system(size: isSuperSmall ? 10 : 14))
+                            .foregroundColor(.white)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Button(action: { viewModel.playPause() }) {
+                        Image(systemName: viewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: isSuperSmall ? 14 : 26))
+                            .foregroundColor(.white)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    Button(action: { viewModel.nextTrack() }) {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: isSuperSmall ? 10 : 14))
+                            .foregroundColor(.white)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                // Разделитель
+                Rectangle()
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: 1, height: isSuperSmall ? 15 : 30)
+                    .padding(.horizontal, 5)
+                
+                // Правый блок системных кнопок
+                if isSuperSmall {
+                    // Если очень узко, выстраиваем в линию
+                    HStack(spacing: 12) {
+                        Button(action: { 
+                            withAnimation { viewMode = (viewMode + 1) % 3 } 
+                        }) {
+                            Image(systemName: viewModeIcon)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Button(action: { NSApplication.shared.terminate(nil) }) {
+                            Image(systemName: "power")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.red.opacity(0.8))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .padding(.trailing, 10)
+                } else {
+                    // Стандартный вертикальный столбик
+                    VStack(spacing: 8) {
+                        Button(action: { 
+                            withAnimation { viewMode = (viewMode + 1) % 3 } 
+                        }) {
+                            Image(systemName: viewModeIcon)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Button(action: { NSApplication.shared.terminate(nil) }) {
+                            Image(systemName: "power")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.red.opacity(0.8))
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                    .padding(.trailing, 10)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
     private func coverView(size: CGFloat) -> some View {
         AsyncImage(url: URL(string: viewModel.coverURL)) { phase in
             if let image = phase.image {
@@ -212,13 +384,21 @@ struct ContentView: View {
         .buttonStyle(PlainButtonStyle())
     }
     
+    private var viewModeIcon: String {
+        switch viewMode {
+        case 0: return "rectangle"
+        case 1: return "menubar.dock.rectangle"
+        default: return "rectangle.portrait"
+        }
+    }
+    
     private var layoutButton: some View {
         Button(action: { 
             withAnimation {
-                isHorizontal.toggle()
+                viewMode = (viewMode + 1) % 3
             }
         }) {
-            Image(systemName: isHorizontal ? "rectangle.portrait" : "rectangle")
+            Image(systemName: viewModeIcon)
                 .font(.system(size: 14, weight: .bold))
                 .foregroundColor(.white.opacity(0.8))
                 .frame(width: 36, height: 36)
